@@ -60,8 +60,8 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "bcrypt",
+ "dotenvy",
  "mongodb",
- "rust_dotenv",
  "serde",
  "tokio",
  "tower-http",
@@ -470,6 +470,12 @@ dependencies = [
  "quote",
  "syn 2.0.98",
 ]
+
+[[package]]
+name = "dotenvy"
+version = "0.15.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1aaf95b3e5c8f23aa320147307562d361db0ae0d51242340f558153b4eb2439b"
 
 [[package]]
 name = "enum-as-inner"
@@ -1492,12 +1498,6 @@ dependencies = [
  "untrusted",
  "windows-sys 0.52.0",
 ]
-
-[[package]]
-name = "rust_dotenv"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee7c41545529f6ee52bddef21e2da33730e828e1e5ea3759436a5b570e8da76b"
 
 [[package]]
 name = "rustc-demangle"
