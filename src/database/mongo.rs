@@ -3,8 +3,6 @@ use mongodb::{Client, Database};
 use std::env;
 
 pub async fn connect_to_mongodb() -> Database {
-    dotenvy::dotenv().expect(".env file not found");
-
     let uri = match env::var("MONGODB_URI") {
         Ok(env) => env,
         Err(e) => e.to_string(),

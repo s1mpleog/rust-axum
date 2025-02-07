@@ -15,6 +15,7 @@ mod models;
 
 #[tokio::main]
 async fn main() {
+    dotenvy::dotenv().expect(".env file not found");
     init_logger();
 
     let db = mongo::connect_to_mongodb().await;

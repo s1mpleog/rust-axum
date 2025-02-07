@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::utils::bcrypt::hash_password;
+use crate::utils::{bcrypt::hash_password, jwt::create_token};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
