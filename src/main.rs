@@ -4,6 +4,7 @@ use std::sync::Arc;
 use self::database::mongo;
 mod config;
 mod logger;
+mod middlewares;
 mod routes;
 mod services;
 mod utils;
