@@ -1,13 +1,23 @@
 use std::sync::Arc;
 
-use crate::utils::bcrypt::hash_password;
+use crate::{
+    models::user_model::{TempUser, VerifyOtpInput},
+    utils::{bcrypt::hash_password, generate_otp::create_otp, send_email::send_mail},
+};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-use mongodb::{bson::doc, bson::oid::ObjectId, results::InsertOneResult, Collection};
+use axum_cookie::{cookie::Cookie, prelude::SameSite, CookieManager};
+use axum_macros::debug_handler;
+use chrono::{Duration, Utc};
+use mongodb::{
+    bson::{doc, oid::ObjectId},
+    Collection,
+};
+use uuid::Uuid;
 
 use crate::{
     config::app_state::AppState,
@@ -15,14 +25,17 @@ use crate::{
     utils::parse_id::parse_object_id,
 };
 
-pub async fn create_user(
+#[debug_handler]
+pub async fn register(
     State(app_state): State<Arc<AppState>>,
-    Json(mut input): Json<User>,
-) -> Result<Json<InsertOneResult>, (StatusCode, String)> {
-    let collection: Collection<User> = app_state.db.collection("users");
+    cookie: CookieManager,
+    Json(input): Json<TempUser>,
+) -> Result<Json<String>, (StatusCode, String)> {
+    let user_collection: Collection<User> = app_state.db.collection("users");
     let filter = doc! {"email": &input.email.to_lowercase()};
+    let temp_user_collection: Collection<TempUser> = app_state.db.collection("temp-user");
 
-    let is_user_exists = collection
+    let is_user_exists = user_collection
         .find_one(filter)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()));
@@ -35,20 +48,48 @@ pub async fn create_user(
             ));
         }
         Ok(None) => {
-            input.id = Some(ObjectId::new());
-            input.email = input.email.to_lowercase();
+            let id = Uuid::new_v4().to_string();
 
-            match hash_password(input.password) {
-                Ok(hashed) => input.password = hashed,
+            let hashed = match hash_password(input.password) {
+                Ok(hashed) => hashed,
                 Err(e) => return Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
             };
 
-            let result = collection
-                .insert_one(input)
+            let otp = create_otp();
+
+            match send_mail(&input.name, &input.email, &otp).await {
+                Ok(_) => true,
+                Err(_) => {
+                    return Err((
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Failed to send email".to_string(),
+                    ))
+                }
+            };
+
+            let temp_user = TempUser {
+                _id: id.clone(),
+                email: input.email.to_lowercase(),
+                password: hashed,
+                otp: Some(otp.to_string()),
+                name: input.name,
+                expires_at: Utc::now() + Duration::minutes(5),
+            };
+
+            temp_user_collection
+                .insert_one(temp_user)
                 .await
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-            return Ok(Json(result));
+            let mut session_token = Cookie::new("session_token", id);
+            session_token.set_http_only(true);
+            session_token.set_same_site(SameSite::Strict);
+
+            cookie.set(session_token);
+
+            return Ok(Json(
+                "A 6 digit otp has been sent to your gmail".to_string(),
+            ));
         }
         Err(_) => {
             return Err((
@@ -57,6 +98,74 @@ pub async fn create_user(
             ))
         }
     }
+}
+
+#[debug_handler]
+pub async fn verify(
+    State(app_state): State<Arc<AppState>>,
+    cookie: CookieManager,
+    Json(input): Json<VerifyOtpInput>,
+) -> impl IntoResponse {
+    let secret_token = match cookie.get("session_token") {
+        Some(cookie) => cookie,
+        None => return Err((StatusCode::BAD_REQUEST, "your session have been expired")),
+    };
+
+    let temp_user_collection: Collection<TempUser> = app_state.db.collection("temp-user");
+
+    let temp_user = temp_user_collection
+        .find_one(doc! {"_id": secret_token.value().to_string()})
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Server Error"));
+
+    match temp_user {
+        Ok(Some(usr)) => {
+            let stored_otp = match &usr.otp {
+                Some(otp) => otp,
+                None => return Err((StatusCode::BAD_REQUEST, "your session is expired")),
+            };
+
+            if stored_otp.to_string() != input.otp.to_string() {
+                return Err((StatusCode::BAD_REQUEST, "Invalid OTP"));
+            }
+
+            let user_id = Some(ObjectId::new());
+
+            let user = User {
+                id: user_id,
+                email: usr.email.to_lowercase(),
+                password: usr.password,
+                name: usr.name,
+            };
+
+            let user_collection: Collection<User> = app_state.db.collection("users");
+
+            let result = user_collection
+                .insert_one(user)
+                .await
+                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Server Error"));
+
+            match result {
+                Ok(_) => {
+                    let result = temp_user_collection
+                        .delete_one(doc! {"_id": secret_token.value().to_string()})
+                        .await
+                        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "server error"));
+
+                    match result {
+                        Ok(_) => {
+                            cookie.remove("session_token");
+                            return Ok((StatusCode::CREATED, "User created successfully"));
+                        }
+                        Err(_) => return Err((StatusCode::INTERNAL_SERVER_ERROR, "server error")),
+                    };
+                }
+                Err(_) => return Err((StatusCode::INTERNAL_SERVER_ERROR, "Server Error")),
+            };
+        }
+        Ok(None) => return Err((StatusCode::BAD_REQUEST, "your session is expired")),
+        Err(_) => return Err((StatusCode::INTERNAL_SERVER_ERROR, "Server error")),
+    };
 }
 
 pub async fn get_all_users(
