@@ -2,10 +2,15 @@ use std::sync::Arc;
 
 use crate::{
     models::user_model::{TempUser, VerifyOtpInput},
-    utils::{bcrypt::hash_password, generate_otp::create_otp, send_email::send_mail},
+    utils::{
+        bcrypt::hash_password,
+        generate_otp::create_otp,
+        s3::{configure_s3, upload_single},
+        send_email::send_mail,
+    },
 };
 use axum::{
-    extract::{Path, State},
+    extract::{Multipart, Path, State},
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -17,6 +22,7 @@ use mongodb::{
     bson::{doc, oid::ObjectId},
     Collection,
 };
+use std::env;
 use uuid::Uuid;
 
 use crate::{
@@ -50,11 +56,6 @@ pub async fn register(
         Ok(None) => {
             let id = Uuid::new_v4().to_string();
 
-            let hashed = match hash_password(input.password) {
-                Ok(hashed) => hashed,
-                Err(e) => return Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
-            };
-
             let otp = create_otp();
 
             match send_mail(&input.name, &input.email, &otp).await {
@@ -65,6 +66,11 @@ pub async fn register(
                         "Failed to send email".to_string(),
                     ))
                 }
+            };
+
+            let hashed = match hash_password(input.password) {
+                Ok(hashed) => hashed,
+                Err(e) => return Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
             };
 
             let temp_user = TempUser {
@@ -114,7 +120,7 @@ pub async fn verify(
     let temp_user_collection: Collection<TempUser> = app_state.db.collection("temp-user");
 
     let temp_user = temp_user_collection
-        .find_one(doc! {"_id": secret_token.value().to_string()})
+        .find_one(doc! {"_id": secret_token.value()})
         .await
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Server Error"));
 
@@ -148,7 +154,7 @@ pub async fn verify(
             match result {
                 Ok(_) => {
                     let result = temp_user_collection
-                        .delete_one(doc! {"_id": secret_token.value().to_string()})
+                        .delete_one(doc! {"_id": secret_token.value()})
                         .await
                         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "server error"));
 
@@ -263,4 +269,30 @@ pub async fn delete_user(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     Ok(Json(String::from("user deleted success")))
+}
+
+#[debug_handler]
+pub async fn test_multipart(mut multipart: Multipart) -> impl IntoResponse {
+    while let Some(field) = multipart.next_field().await.unwrap() {
+        let name = field.name().unwrap_or("unknown").to_string();
+        let file_name = field.file_name().unwrap_or("unnamed").to_string();
+        let content_type = field.content_type().unwrap_or("unknown").to_string();
+        let data = field.bytes().await.unwrap();
+
+        if name == "avatar" {
+            let avatar_type = content_type.clone();
+            let avatar_name = file_name.clone();
+
+            let result = match upload_single(data.to_vec(), &avatar_type, &avatar_name).await {
+                Ok(url) => url,
+                Err(_) => {
+                    return Err((StatusCode::INTERNAL_SERVER_ERROR, "falied to upload avatar"))
+                }
+            };
+
+            return Ok(Json(result));
+        }
+    }
+
+    return Err((StatusCode::INTERNAL_SERVER_ERROR, "Server Error"));
 }
