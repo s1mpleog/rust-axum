@@ -9,6 +9,6 @@ pub struct Products {
     pub price: f32,
     pub offer_price: Option<f32>,
     pub category: String,
-    pub image_url: Option<String>, // TODO: maybe change this to vec to support multiple image uploads
+    pub image_url: Option<Vec<String>>,
     pub brand: String,
 }
