@@ -3,10 +3,7 @@ use std::sync::Arc;
 use crate::{
     models::user_model::{TempUser, VerifyOtpInput},
     utils::{
-        bcrypt::hash_password,
-        generate_otp::create_otp,
-        s3::{configure_s3, upload_single},
-        send_email::send_mail,
+        bcrypt::hash_password, generate_otp::create_otp, s3::upload_single, send_email::send_mail,
     },
 };
 use axum::{
@@ -22,7 +19,6 @@ use mongodb::{
     bson::{doc, oid::ObjectId},
     Collection,
 };
-use std::env;
 use uuid::Uuid;
 
 use crate::{
@@ -142,6 +138,7 @@ pub async fn verify(
                 email: usr.email.to_lowercase(),
                 password: usr.password,
                 name: usr.name,
+                role: Some("user".to_string()),
             };
 
             let user_collection: Collection<User> = app_state.db.collection("users");

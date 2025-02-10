@@ -47,6 +47,7 @@ pub async fn login(
                     auth_cookie.set_http_only(true);
                     auth_cookie.set_max_age(Duration::from_secs(3600));
                     auth_cookie.set_same_site(SameSite::Strict);
+                    auth_cookie.set_path("/");
                     cookie.set(auth_cookie);
                     return StatusCode::OK.into_response();
                 }
