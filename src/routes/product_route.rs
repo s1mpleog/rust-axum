@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::extract::DefaultBodyLimit;
-use axum::routing::{post, put};
+use axum::routing::{get, post, put};
 use axum::{middleware, Router};
 use tower_http::limit::RequestBodyLimitLayer;
 
@@ -17,4 +17,6 @@ pub fn product_route(app_state: &Arc<AppState>) -> Router<Arc<AppState>> {
         .layer(middleware::from_fn_with_state(app_state.clone(), is_admin))
         .layer(DefaultBodyLimit::disable())
         .layer(RequestBodyLimitLayer::new(15 * 1024 * 1024))
+        .route("/all", get(get_all_products))
+        .layer(middleware::from_fn_with_state(app_state.clone(), is_admin))
 }

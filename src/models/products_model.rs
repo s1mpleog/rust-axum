@@ -12,3 +12,8 @@ pub struct Products {
     pub image_url: Option<Vec<String>>,
     pub brand: String,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct ProductPaginate {
+    pub page: i32,
+}
