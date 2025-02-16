@@ -8,7 +8,7 @@ use axum::{
 };
 use axum_macros::debug_handler;
 use mongodb::{
-    bson::{doc, Uuid},
+    bson::{doc, oid::ObjectId},
     Collection,
 };
 
@@ -24,7 +24,7 @@ pub async fn create_products(
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let collection: Collection<Products> = app_state.db.collection("products");
 
-    let product_id = Uuid::new().to_string();
+    let product_id = ObjectId::new();
 
     data._id = Some(product_id);
 

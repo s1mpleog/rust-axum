@@ -1,8 +1,9 @@
+use mongodb::bson::oid::ObjectId;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Products {
-    pub _id: Option<String>,
+    pub _id: Option<ObjectId>,
     pub title: String,
     pub description: String,
     pub price: f32,
