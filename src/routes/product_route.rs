@@ -19,4 +19,5 @@ pub fn product_route(app_state: &Arc<AppState>) -> Router<Arc<AppState>> {
         .layer(RequestBodyLimitLayer::new(15 * 1024 * 1024))
         .route("/all", get(get_all_products))
         .layer(middleware::from_fn_with_state(app_state.clone(), is_admin))
+        .route("/filter", get(filter_products))
 }

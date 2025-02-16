@@ -14,7 +14,7 @@ use mongodb::{
 
 use crate::{
     config::app_state::AppState,
-    models::products_model::{ProductPaginate, Products},
+    models::products_model::{ProductFilter, ProductPaginate, Products},
     utils::s3::upload_single,
 };
 
@@ -136,4 +136,61 @@ pub async fn get_all_products(
 
     tracing::info!("{:?}", products);
     return Ok(Json(products));
+}
+
+#[debug_handler]
+pub async fn filter_products(
+    State(app_state): State<Arc<AppState>>,
+    Query(query): Query<ProductFilter>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let collection: Collection<Products> = app_state.db.collection("products");
+
+    let search_query = vec![
+        query.title.unwrap_or_else(|| "".to_string()),
+        query.brand.unwrap_or_else(|| "".to_string()),
+        query.category.unwrap_or_else(|| "".to_string()),
+    ]
+    .into_iter()
+    .filter(|s| !s.is_empty())
+    .collect::<Vec<String>>();
+
+    tracing::info!("SEARCH_QUERY IS: {:?}", &search_query);
+
+    let pipeline = vec![
+        doc! {
+            "$search": {
+            "index": "default",
+            "text": {
+            "query": &search_query,
+            "path": ["title", "brand", "category"]
+        }
+        }
+        },
+        doc! {"$limit": 5},
+    ];
+
+    let mut cursor = collection.aggregate(pipeline).await.map_err(|e| {
+        tracing::debug!("ERROR: {}", e.to_string());
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Error while fetching products".to_string(),
+        )
+    })?;
+
+    let mut products = Vec::new();
+
+    while cursor.advance().await.map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Something went wrong".to_string(),
+        )
+    })? {
+        products.push(
+            cursor
+                .deserialize_current()
+                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed".to_string()))?,
+        )
+    }
+
+    Ok(Json(products))
 }

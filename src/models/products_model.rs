@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-#[allow(unused)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Products {
     pub _id: Option<String>,
@@ -16,4 +15,11 @@ pub struct Products {
 #[derive(Debug, Deserialize)]
 pub struct ProductPaginate {
     pub page: i32,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ProductFilter {
+    pub category: Option<String>,
+    pub title: Option<String>,
+    pub brand: Option<String>,
 }
