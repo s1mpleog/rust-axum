@@ -9,6 +9,7 @@ pub struct CartItem {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Cart {
+    pub _id: Option<ObjectId>,
     pub products: Vec<CartItem>,
     pub user_id: ObjectId,
     pub total_price: Option<f32>,
